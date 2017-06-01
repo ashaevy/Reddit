@@ -43,6 +43,8 @@ public class MainFragment extends Fragment implements BaseAdapter.OnItemClickLis
     public static final String REDDIT_API_BASE_URL = "https://www.reddit.com/";
     public static final String REDDIT_OAUTH_BASE_URL = "https://oauth.reddit.com/";
 
+    public static final String FLAG_TOP_OF_DAY = "day";
+
     public static final String ANONYMOUS_AUTHORIZATION = "Basic bV96Q1cxRGl4czlXTEE6";
     public static final String ANONYMOUS_DEVICE = "DO_NOT_TRACK_THIS_DEVICE";
     public static final String GRANT_TYPE = "https://oauth.reddit.com/grants/installed_client";
@@ -295,7 +297,7 @@ public class MainFragment extends Fragment implements BaseAdapter.OnItemClickLis
             public void onResponse(Call<TokenResponse> call, Response<TokenResponse> response) {
                 String accessToken = response.body().getAccessToken();
                 Call<RedditListing> getRedditItemsCall = retrofitOAuth.
-                        getRedditItems("bearer " + accessToken, PAGE_SIZE, after);
+                        getRedditItems(FLAG_TOP_OF_DAY, "bearer " + accessToken, PAGE_SIZE, after);
                 getRedditItemsCall.enqueue(callback);
             }
 

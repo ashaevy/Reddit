@@ -2,6 +2,7 @@ package com.ashaevy.reddit;
 
 import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -135,7 +136,9 @@ public class RedditItemsAdapter extends BaseAdapter<RedditItem> {
         private void bind(RedditItem redditItem){
             setUpTV(titleTextView, redditItem.getTitle());
             setUpTV(authorTextView, "Author: " + redditItem.getAuthor());
-            setUpTV(createdTextView, "Created: " + redditItem.getCreated());
+            long timeOfPost = redditItem.getCreatedUTC() * 1000;
+            setUpTV(createdTextView, "Posted " + DateUtils.
+                    getRelativeTimeSpanString(timeOfPost));
             setUpTV(numCommentsTextView, "Comments: " + redditItem.getNumComments());
             setUpThumbnail(thumbnailImageView, redditItem);
         }

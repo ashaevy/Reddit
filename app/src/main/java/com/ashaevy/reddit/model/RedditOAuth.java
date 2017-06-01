@@ -11,11 +11,12 @@ import retrofit2.http.Query;
  */
 
 public interface RedditOAuth {
-    @GET("/top/.json?t=all")
+    @GET("/top/.json")
     @Headers({
             "User-Agent: org.quantumbadger.redreader/1.9.8"
     })
-    Call<RedditListing> getRedditItems(@Header("Authorization") String authorization,
+    Call<RedditListing> getRedditItems(@Query("t") String t,
+                                       @Header("Authorization") String authorization,
                                        @Query("limit") int limit,
                                        @Query("after") String after);
 }

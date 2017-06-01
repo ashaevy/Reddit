@@ -7,9 +7,10 @@ public class RedditItem {
     private String title;
     private String author;
     private String thumbnail;
-    private int created;
+    @SerializedName("created_utc")
+    private long createdUTC;
     @SerializedName("num_comments")
-    private int numComments;
+    private long numComments;
 
     public String getTitle() {
         return title;
@@ -35,19 +36,19 @@ public class RedditItem {
         this.thumbnail = thumbnail;
     }
 
-    public int getCreated() {
-        return created;
+    public long getCreatedUTC() {
+        return createdUTC;
     }
 
-    public void setCreated(int created) {
-        this.created = created;
+    public void setCreatedUTC(long createdUTC) {
+        this.createdUTC = createdUTC;
     }
 
-    public int getNumComments() {
+    public long getNumComments() {
         return numComments;
     }
 
-    public void setNumComments(int numComments) {
+    public void setNumComments(long numComments) {
         this.numComments = numComments;
     }
 }
