@@ -3,4 +3,5 @@
     <string name="reload">Reload</string>
     <string name="check_your_network_connection">Check your network connection</string>
     <string name="can_not_load_data">Can\'t load data.\nCheck your network connection.</string>
+    <string name="image_saved_toast">"Image saved as "</string>
 </resources>

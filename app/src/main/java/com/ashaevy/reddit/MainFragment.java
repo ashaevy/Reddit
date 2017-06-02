@@ -1,5 +1,6 @@
 package com.ashaevy.reddit;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.support.annotation.Nullable;
@@ -16,6 +17,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.ashaevy.reddit.model.RedditItem;
+import com.ashaevy.reddit.model.RedditPreview;
 
 import java.util.List;
 
@@ -126,7 +128,14 @@ public class MainFragment extends
 
     @Override
     public void onItemClick(int position, View view) {
-
+        RedditItem clickedItem = redditItemsAdapter.getItem(position);
+        RedditPreview preview = clickedItem.getPreview();
+        if (preview != null && preview.isEnabled()) {
+            String imageUrl = preview.getImages().get(0).getSource().getUrl();
+            Intent intent = new Intent(getActivity(), ImageActivity.class);
+            intent.putExtra(ImageActivity.IMAGE_URL_KEY, imageUrl);
+            startActivity(intent);
+        }
     }
 
     @Override

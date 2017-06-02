@@ -11,6 +11,7 @@ public class RedditItem {
     private long createdUTC;
     @SerializedName("num_comments")
     private long numComments;
+    private RedditPreview preview;
 
     public String getTitle() {
         return title;
@@ -50,5 +51,13 @@ public class RedditItem {
 
     public void setNumComments(long numComments) {
         this.numComments = numComments;
+    }
+
+    public RedditPreview getPreview() {
+        return preview;
+    }
+
+    public void setPreview(RedditPreview preview) {
+        this.preview = preview;
     }
 }
