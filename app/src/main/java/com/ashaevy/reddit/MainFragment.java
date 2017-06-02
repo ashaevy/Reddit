@@ -1,6 +1,7 @@
 package com.ashaevy.reddit;
 
 import android.os.Bundle;
+import android.os.Parcelable;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v7.widget.DefaultItemAnimator;
@@ -14,11 +15,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import com.ashaevy.reddit.model.RedditAPI;
-import com.ashaevy.reddit.model.RedditListing;
-import com.ashaevy.reddit.model.RedditListingData;
-import com.ashaevy.reddit.model.RedditOAuth;
-import com.ashaevy.reddit.model.TokenResponse;
+import com.ashaevy.reddit.model.RedditItem;
 
 import java.util.List;
 
@@ -26,28 +23,17 @@ import butterknife.BindView;
 import butterknife.ButterKnife;
 import butterknife.OnClick;
 import butterknife.Unbinder;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-import retrofit2.Retrofit;
-import retrofit2.converter.gson.GsonConverterFactory;
 
 /**
  * Created by ashaevy on 01.06.17.
  */
 
-public class MainFragment extends Fragment implements BaseAdapter.OnItemClickListener, BaseAdapter.OnReloadClickListener {
+public class MainFragment extends
+        Fragment implements BaseAdapter.OnItemClickListener, BaseAdapter.OnReloadClickListener,
+        Contract.View {
 
-    public static final int PAGE_SIZE = 10;
-
-    public static final String REDDIT_API_BASE_URL = "https://www.reddit.com/";
-    public static final String REDDIT_OAUTH_BASE_URL = "https://oauth.reddit.com/";
-
-    public static final String FLAG_TOP_OF_DAY = "day";
-
-    public static final String ANONYMOUS_AUTHORIZATION = "Basic bV96Q1cxRGl4czlXTEE6";
-    public static final String ANONYMOUS_DEVICE = "DO_NOT_TRACK_THIS_DEVICE";
-    public static final String GRANT_TYPE = "https://oauth.reddit.com/grants/installed_client";
+    private static final String LIST_STATE_FRAGMENT_TAG = "LIST_STATE_FRAGMENT_TAG";
+    private static final String BUNDLE_RECYCLER_LAYOUT = "MainFragment.recycler.layout";
 
     @BindView(R.id.rv)
     RecyclerView recyclerView;
@@ -60,167 +46,83 @@ public class MainFragment extends Fragment implements BaseAdapter.OnItemClickLis
     @BindView(R.id.reload_btn)
     Button reloadButton;
 
+    private Unbinder unbinder;
+
     private LinearLayoutManager layoutManager;
     private RedditItemsAdapter redditItemsAdapter;
 
-    private boolean isLastPage = false;
-    private boolean isLoading = false;
+    private Contract.Presenter presenter;
 
-    private Unbinder unbinder;
-
-    private String after;
-
-
-
-    private RecyclerView.OnScrollListener recyclerViewOnScrollListener = new RecyclerView.OnScrollListener() {
-        @Override
-        public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
-            super.onScrollStateChanged(recyclerView, newState);
-        }
-
-        @Override
-        public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
-            super.onScrolled(recyclerView, dx, dy);
-            int visibleItemCount = layoutManager.getChildCount();
-            int totalItemCount = layoutManager.getItemCount();
-            int firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition();
-
-            if (!isLoading && !isLastPage) {
-                if ((visibleItemCount + firstVisibleItemPosition) >= totalItemCount
-                        && firstVisibleItemPosition >= 0
-                        && totalItemCount >= PAGE_SIZE) {
-                    loadMoreItems();
+    private RecyclerView.OnScrollListener recyclerViewOnScrollListener =
+            new RecyclerView.OnScrollListener() {
+                @Override
+                public void onScrollStateChanged(RecyclerView recyclerView, int newState) {
+                    super.onScrollStateChanged(recyclerView, newState);
                 }
-            }
-        }
-    };
-    private RedditAPI redditAPIService;
-    private RedditOAuth retrofitOAuth;
+
+                @Override
+                public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                    super.onScrolled(recyclerView, dx, dy);
+                    int visibleItemCount = layoutManager.getChildCount();
+                    int totalItemCount = layoutManager.getItemCount();
+                    int firstVisibleItemPosition = layoutManager.findFirstVisibleItemPosition();
+
+                    if (presenter.canHaveMoreItems()) {
+                        if ((visibleItemCount + firstVisibleItemPosition) >= totalItemCount
+                                && firstVisibleItemPosition >= 0
+                                && totalItemCount >= ListStateFragment.PAGE_SIZE) {
+                            presenter.loadMoreItems();
+                        }
+                    }
+                }
+            };
 
     @OnClick(R.id.reload_btn)
     public void onReloadButtonClicked() {
-        errorLinearLayout.setVisibility(View.GONE);
-        loadingProgressBar.setVisibility(View.VISIBLE);
-        requestRedditItemsFetch(redditItemsFirstFetchCallback, reportFirstFetchError());
+        presenter.requestFirstFetchReloading();
     }
 
-    private Callback<RedditListing> redditItemsFirstFetchCallback = new Callback<RedditListing>() {
-        @Override
-        public void onResponse(Call<RedditListing> call, Response<RedditListing> response) {
+    @Override
+    public void onUIStateChanged(ListStateFragment.ItemsListUIState uiState) {
+        if (uiState.showFirstLoading) {
+            loadingProgressBar.setVisibility(View.VISIBLE);
+            errorLinearLayout.setVisibility(View.GONE);
+        } else {
             loadingProgressBar.setVisibility(View.GONE);
-            isLoading = false;
-
-            if (!response.isSuccessful()) {
-                int responseCode = response.code();
-                if(responseCode == 504) { // 504 Unsatisfiable Request (only-if-cached)
-                    errorTextView.setText(getString(R.string.can_not_load_data));
-                    errorLinearLayout.setVisibility(View.VISIBLE);
-                }
-                return;
+        }
+        if (uiState.showFirstLoadingError) {
+            errorTextView.setText(getString(R.string.can_not_load_data));
+            errorLinearLayout.setVisibility(View.VISIBLE);
+            loadingProgressBar.setVisibility(View.GONE);
+        } else {
+            errorLinearLayout.setVisibility(View.GONE);
+        }
+        if (uiState.showLoadMoreItems) {
+            redditItemsAdapter.updateFooter(RedditItemsAdapter.FooterType.LOAD_MORE);
+        }
+        if (uiState.showLoadMoreError) {
+            redditItemsAdapter.updateFooter(RedditItemsAdapter.FooterType.ERROR);
+        }
+        if (uiState.showLoadMoreFooter) {
+            if (!redditItemsAdapter.isFooterAdded()) {
+                redditItemsAdapter.addFooter();
             }
-
-            RedditListing redditListing = response.body();
-            if (redditListing != null) {
-
-                after = redditListing.getData().getAfter();
-
-                List<RedditListingData.RedditListingChild> redditListingChildren =
-                        redditListing.getData().getChildren();
-                if (redditListingChildren != null) {
-                    if(redditListingChildren.size() > 0) {
-                        for (RedditListingData.RedditListingChild child: redditListingChildren) {
-                            redditItemsAdapter.add(child.getData());
-                        }
-                    }
-
-                    if (redditListingChildren.size() >= PAGE_SIZE) {
-                        redditItemsAdapter.addFooter();
-                    } else {
-                        isLastPage = true;
-                    }
-                }
+        } else {
+            if (redditItemsAdapter.isFooterAdded()) {
+                redditItemsAdapter.removeFooter();
             }
         }
-
-        @Override
-        public void onFailure(Call<RedditListing> call, Throwable t) {
-            if (!call.isCanceled()) {
-                reportFirstFetchError();
-            }
-        }
-    };
-
-    private Runnable reportFirstFetchError() {
-        return new Runnable() {
-            @Override
-            public void run() {
-                isLoading = false;
-                loadingProgressBar.setVisibility(View.GONE);
-
-                errorTextView.setText(getString(R.string.can_not_load_data));
-                errorLinearLayout.setVisibility(View.VISIBLE);
-            }
-        };
     }
 
-    private Runnable reportNextFetchError() {
-        return new Runnable() {
-            @Override
-            public void run() {
-                redditItemsAdapter.updateFooter(RedditItemsAdapter.FooterType.ERROR);
-            }
-        };
+    @Override
+    public void onFirstListItemsLoaded(List<RedditItem> items) {
+        redditItemsAdapter.addAll(items);
     }
 
-
-    private Callback<RedditListing> redditItemsNextFetchCallback = new Callback<RedditListing>() {
-        @Override
-        public void onResponse(Call<RedditListing> call, Response<RedditListing> response) {
-            redditItemsAdapter.removeFooter();
-            isLoading = false;
-
-            if (!response.isSuccessful()) {
-                int responseCode = response.code();
-                switch (responseCode){
-                    case 504: // 504 Unsatisfiable Request (only-if-cached)
-                        break;
-                    case 400:
-                        isLastPage = true;
-                        break;
-                }
-                return;
-            }
-
-            RedditListing redditListing = response.body();
-            if (redditListing != null) {
-
-                after = redditListing.getData().getAfter();
-
-                List<RedditListingData.RedditListingChild> redditListingChildren =
-                        redditListing.getData().getChildren();
-                if (redditListingChildren != null) {
-                    if(redditListingChildren.size() > 0) {
-                        for (RedditListingData.RedditListingChild child: redditListingChildren) {
-                            redditItemsAdapter.add(child.getData());
-                        }
-                    }
-
-                    if (redditListingChildren.size() >= PAGE_SIZE) {
-                        redditItemsAdapter.addFooter();
-                    } else {
-                        isLastPage = true;
-                    }
-                }
-            }
-        }
-
-        @Override
-        public void onFailure(Call<RedditListing> call, Throwable t) {
-            if (!call.isCanceled()){
-                reportNextFetchError().run();
-            }
-        }
-    };
+    @Override
+    public void onNextListItemsLoaded(List<RedditItem> items) {
+        redditItemsAdapter.addAll(items);
+    }
 
     @Override
     public void onItemClick(int position, View view) {
@@ -229,39 +131,29 @@ public class MainFragment extends Fragment implements BaseAdapter.OnItemClickLis
 
     @Override
     public void onReloadClick() {
-        redditItemsAdapter.updateFooter(RedditItemsAdapter.FooterType.LOAD_MORE);
-        requestRedditItemsFetch(redditItemsNextFetchCallback, reportNextFetchError());
+        presenter.requestNextFetchReloading();
     }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        createRetrofitAPI();
-        createRetrofitOAuth();
+
+        ListStateFragment listStateFragment = ((ListStateFragment) getFragmentManager().
+                findFragmentByTag(LIST_STATE_FRAGMENT_TAG));
+        if (listStateFragment == null) {
+            listStateFragment = new ListStateFragment();
+            getFragmentManager().beginTransaction().add(listStateFragment,
+                    LIST_STATE_FRAGMENT_TAG).commit();
+        }
+        this.presenter = listStateFragment;
+
         setHasOptionsMenu(true);
-    }
-
-    private void createRetrofitAPI() {
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl(REDDIT_API_BASE_URL)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build();
-
-        redditAPIService = retrofit.create(RedditAPI.class);
-    }
-
-    private void createRetrofitOAuth() {
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl(REDDIT_OAUTH_BASE_URL)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build();
-
-        retrofitOAuth = retrofit.create(RedditOAuth.class);
     }
 
     @Nullable
     @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+    public View onCreateView(LayoutInflater inflater, @Nullable
+            ViewGroup container, @Nullable Bundle savedInstanceState) {
         View rootView = inflater.inflate(R.layout.fragment_main, container, false);
         unbinder = ButterKnife.bind(this, rootView);
 
@@ -286,42 +178,45 @@ public class MainFragment extends Fragment implements BaseAdapter.OnItemClickLis
         // Pagination
         recyclerView.addOnScrollListener(recyclerViewOnScrollListener);
 
-        requestRedditItemsFetch(redditItemsFirstFetchCallback, reportFirstFetchError());
+        presenter.setListStateListener(this);
+        if (savedInstanceState == null) {
+            presenter.requestRedditItemsFirstFetch();
+        } else {
+            presenter.requestRestoreState();
+        }
     }
 
-    private void requestRedditItemsFetch(final Callback<RedditListing> callback,
-                                         final Runnable failureCallback) {
-        redditAPIService.accessToken(GRANT_TYPE,
-                ANONYMOUS_DEVICE, ANONYMOUS_AUTHORIZATION).enqueue(new Callback<TokenResponse>() {
-            @Override
-            public void onResponse(Call<TokenResponse> call, Response<TokenResponse> response) {
-                String accessToken = response.body().getAccessToken();
-                Call<RedditListing> getRedditItemsCall = retrofitOAuth.
-                        getRedditItems(FLAG_TOP_OF_DAY, "bearer " + accessToken, PAGE_SIZE, after);
-                getRedditItemsCall.enqueue(callback);
-            }
+    @Override
+    public void onViewStateRestored(@Nullable Bundle savedInstanceState) {
+        super.onViewStateRestored(savedInstanceState);
 
-            @Override
-            public void onFailure(Call<TokenResponse> call, Throwable t) {
-                failureCallback.run();
-            }
-        });
+        if (savedInstanceState != null) {
+            Parcelable savedRecyclerLayoutState = savedInstanceState.
+                    getParcelable(BUNDLE_RECYCLER_LAYOUT);
+            recyclerView.getLayoutManager().onRestoreInstanceState(savedRecyclerLayoutState);
+        }
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putParcelable(BUNDLE_RECYCLER_LAYOUT, recyclerView.getLayoutManager().onSaveInstanceState());
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+        presenter.setListStateListener(null);
         removeListeners();
-        after = null;
         unbinder.unbind();
     }
 
-    private void loadMoreItems() {
-        isLoading = true;
-        requestRedditItemsFetch(redditItemsNextFetchCallback, reportNextFetchError());
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
     }
 
-    private void removeListeners(){
+    private void removeListeners() {
         recyclerView.removeOnScrollListener(recyclerViewOnScrollListener);
     }
 

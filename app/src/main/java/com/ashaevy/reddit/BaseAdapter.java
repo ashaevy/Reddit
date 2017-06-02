@@ -120,6 +120,10 @@ public abstract class BaseAdapter<T> extends RecyclerView.Adapter<RecyclerView.V
         }
     }
 
+    public boolean isFooterAdded() {
+        return isFooterAdded;
+    }
+
     public boolean isEmpty() {
         return getItemCount() == 0;
     }
